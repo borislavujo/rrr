@@ -1,0 +1,97 @@
+function [lkab,lkba] = analyt3x3(Kl,vpl)
+% calculates analytically rates between states (1,2) and (3)
+vpl = vpl - logSumExp(vpl);
+% 0. get tst rate as an upper limit
+lkabtst = tstlog(Kl,vpl);
+% 1. make state a the one of {1,2} having smaller rxn time with (3)
+if (Kl(1,3)<Kl(2,3))
+  P = [0,1,0;1,0,0;0,0,1];
+  vpl = P*vpl;
+  Kl = P*Kl*P;
+endif
+% 2. subtract from Kl inverse rxn time tac
+ltac = logSumExp([Kl(1,3);Kl(3,1)]);
+Kl = Kl - ltac;
+% 3. assign pa,pb,tab,tbc
+lpa = vpl(1);
+lpb = vpl(2);
+ltab = logSumExp([Kl(1,2);Kl(2,1)]);
+ltbc = logSumExp([Kl(2,3);Kl(3,2)]);
+% 4. calculate the terms for numerator
+%pa^2 tab - pa^3 tab + pa pb tab - pa^2 pb tab + pa^2 tbc - pa^3 tbc + 2 pa pb tbc - 3 pa^2 pb tbc + pb^2 tbc - 3 pa pb^2 tbc - pb^3 tbc + pa pb tab tbc + pb^2 tab tbc - pa pb^2 tab tbc - pb^3 tab tbc
+%pa^2*tab - pa^3*tab + pa*pb*tab - pa^2*pb*tab + pb^2*tbc - pa^3*tbc + 2*pa*pb*tbc - 3*pa^2*pb*tbc + pb^2*tbc - 3*pa*pb^2*tbc - pb^3*tbc + pa*pb*tab*tbc + pb^2*tab*tbc - pa*pb^2*tab*tbc - pb^3*tab*tbc
+if(vpl(3)>-1)
+% (pa tab-pa^2 tab-pa tab tbc-pa^2 tab tbc) mpc+(tbc+tab tbc+2 pa tab tbc) mpc^2+(-tbc-tab tbc) mpc^3+O[mpc]^11
+  lmpc = subFrom1(vpl(3))
+  Mpc1 = [1,lpa + ltab; -1, 2*lpa + ltab; -1, lpa + ltab + ltbc; -1, 2*lpa + ltab + ltbc];
+  Mpc2 = [1,ltbc; +1, ltab + ltbc; +1, log(2) + lpa + ltab + ltbc];
+  Mpc3 = [-1,ltbc; -1, ltab + ltbc];
+  Ujo = [Mpc1(:,2)+lmpc, Mpc1(:,1); Mpc2(:,2)+2*lmpc, Mpc2(:,1); Mpc3(:,2)+3*lmpc, Mpc3(:,1)];
+  vnum = logSumDiff(Ujo);
+elseif (lpa>lpb)
+% put powers of pa together
+  lmpa = subFrom1(lpa);
+%(-pb tbc-2 pb^2 tbc-pb^3 tbc+pb tab tbc-pb^3 tab tbc)+(tab+pb tab+tbc+4 pb tbc+3 pb^2 tbc-pb tab tbc+pb^2 tab tbc) mpa+(-2 tab-pb tab-2 tbc-3 pb tbc) mpa^2+(tab+tbc) mpa^3+O[mpa]^11
+  Mpa0 = [-1, lpb + ltbc; -1, log(2) + 2 * lpb + ltbc; -1, 3 * lpb + ltbc; +1, lpb + ltab + ltbc; -1, 3 * lpb + ltab + ltbc];
+  Mpa1 = [+1, ltab; +1, lpb + ltab; +1, ltbc; +1, log(4) + lpb + ltbc; +1, log(3) + 2*lpb + ltbc; -1, lpb + ltab + ltbc; +1, 2*lpb + ltab + ltbc];
+  Mpa2 = [-1, log(2) + ltab; -1, lpb + ltab; -1, log(2)+ltbc; -1 ,log(3) + lpb + ltbc];
+  Mpa3 = [1,ltab;1,ltbc];
+  Ujo = [Mpa0(:,2),Mpa0(:,1); Mpa1(:,2)+lmpa, Mpa1(:,1); Mpa2(:,2)+2*lmpa, Mpa2(:,1); Mpa3(:,2)+3*lmpa, Mpa3(:,1)];
+  vnum = logSumDiff(Ujo);
+%vpref = [zeros(6,1);log(2);log(3);0;log(3);zeros(5,1)];
+%vtab = [ones(4,1);zeros(7,1);ones(4,1)];
+%vtbc = [zeros(4,1);ones(11,1)];
+%vpa = zeros(15,1); vpa([3;7;10;12;14]) = 1; vpa([1;4;5;8]) = 2;    vpa([2;6]) = 3;
+%vpb = zeros(15,1); vpb([3;4;7;8;12]) = 1;   vpb([9;10;13;14]) = 2; vpb([11;15]) = 3;
+%vppm = ones(15,1); vppm([2;4;6;8;10;11;14;15]) = -1;
+%vhod = vpref + vtab*ltab + vtbc*ltbc + vpa*lpa + vpb*lpb;
+%Ujo = [vhod,vppm];
+%vnum = logSumDiff(Ujo)
+else
+% (pa tab-pa^3 tab-pa tbc-2 pa^2 tbc-pa^3 tbc)+(-pa tab+pa^2 tab+tbc+4 pa tbc+3 pa^2 tbc+tab tbc+pa tab tbc) mpb+(-2 tbc-3 pa tbc-2 tab tbc-pa tab tbc) mpb^2+(tbc+tab tbc) mpb^3+O[mpb]^11
+  lmpb = subFrom1(lpb);
+  Mpb0 = [1,lpa + ltab;-1,3*lpa + ltab;-1,lpa + ltbc;-1,log(2) + 2*lpa + ltbc;-1,3*lpa + ltbc];
+  Mpb1 = [-1,lpa + ltab;+1,2*lpa + ltab;+1,ltbc;+1,log(4) + lpa + ltbc;+1,log(3) + 2*lpa + ltbc;+1,ltab + ltbc;+1,lpa + ltab + ltbc];
+  Mpb2 = [-1,log(2) + ltbc;-1,log(3) + lpa + ltbc;-1,log(2) + ltab + ltbc;-1,lpa + ltab + ltbc];
+  Mpb3 = [1,ltbc;+1,ltab + ltbc];
+  Ujo = [Mpb0(:,2),Mpb0(:,1); Mpb1(:,2)+lmpb, Mpb1(:,1); Mpb2(:,2)+2*lmpb, Mpb2(:,1); Mpb3(:,2)+3*lmpb, Mpb3(:,1)];
+  vnum = logSumDiff(Ujo);
+endif
+% 5. calculate the terms for denominator
+%vpref = zeros(17,1); vpref([2;9;15]) = log(2);
+%vtab = [zeros(5,1);ones(7,1);zeros(5,1)];
+%vtbc = [zeros(12,1);ones(5,1)];
+%vpa = ones(17,1); vpa([1;4;8;11]) = 0; vpa([3;7;10;14;16]) = 2;
+%vpb = ones(17,1); vpb([6;7;13;14]) = 0; vpb([4;5;11;12;17]) = 2;
+%vppm = ones(17,1); vppm([2;4;7;9;11;14;15]) = -1;
+%vhod = vpref + vtab*ltab + vtbc*ltbc + vpa*lpa + vpb*lpb;
+%Ujo = [vhod,vppm]
+%vden = logSumDiff(Ujo)
+if(vpl(3)>-1)
+% (-pa+pa^2+pa tbc+pa^2 tbc)+(1-pa^2+tab-pa^2 tab-2 pa tbc-pa^2 tbc) mpc+(-1+pa-tab+pa tab+pa tbc) mpc^2+O[mpc]^11
+  lmpc = subFrom1(vpl(3))
+  Mpc0 = [-1,lpa;+1,2*lpa;+1,lpa + ltbc;+1,2*lpa + ltbc];
+  Mpc1 = [1,0;-1,2*lpa;+1,ltab;-1,2*lpa + ltab;-1,log(2) + lpa + ltbc;-1,2*lpa + ltbc];
+  Mpc2 = [-1,0;+1,lpa;-1,ltab;+1,lpa + ltab;+1,lpa + ltbc];
+  Ujo = [Mpc0(:,2), Mpc0(:,1); Mpc1(:,2)+lmpc, Mpc1(:,1); Mpc2(:,2)+2*lmpc, Mpc2(:,1)];
+  vden = logSumDiff(Ujo);
+elseif (lpa>lpb)
+% (-pb tbc+pb^2 tbc)+(-pb^2+tab-pb^2 tab+tbc-pb^2 tbc) mpa+(pb-tab+pb tab-tbc+pb tbc) mpa^2+O[mpa]^11
+  lmpa = subFrom1(lpa);
+  Mpa0 = [-1,lpb + ltbc;+1,2*lpb + ltbc];
+  Mpa1 = [-1,2*lpb;+1,ltab;-1,2*lpb + ltab;+1,ltbc;-1,2*lpb + ltbc];
+  Mpa2 = [1,lpb;-1,ltab;+1,lpb + ltab;-1,ltbc;+1,lpb + ltbc];
+  Ujo = [Mpa0(:,2),Mpa0(:,1); Mpa1(:,2)+lmpa, Mpa1(:,1); Mpa2(:,2)+2*lmpa, Mpa2(:,1)];
+  vden = logSumDiff(Ujo);
+else
+% (-pa+pa^2)+(1-pa^2+tab-pa^2 tab-pa^2 tbc) mpb+(-1+pa-tab+pa tab+pa tbc) mpb^2+O[mpb]^11
+  lmpb = subFrom1(lpb);
+  Mpb0 = [-1,lpa;+1,2*lpa];
+  Mpb1 = [1,0;-1,2*lpa;+1,ltab;-1,2*lpa + ltab;-1,2*lpa + ltbc];
+  Mpb2 = [-1,0;+1,lpa;-1,ltab;+1,lpa + ltab;+1,lpa + ltbc];
+  Ujo = [Mpb0(:,2),Mpb0(:,1); Mpb1(:,2)+lmpb, Mpb1(:,1); Mpb2(:,2)+2*lmpb, Mpb2(:,1)];
+  vden = logSumDiff(Ujo);
+endif
+% 6. calculate the rate (add what was subtracted)
+lkab = min(ltac + vnum(1) - vden(1),lkabtst)
+lkba = lkab + vpl(3) - logSumExp(vpl(1:2))

@@ -1,0 +1,66 @@
+function [lkAB, lkBA] = rxn(Kl,vlp,howFine,lstartdt,ratioEnd)
+% calculates rate constant between 2 states from a 3x3 rate matrix K and log of equilibrium populations vlp
+% grouped states are states 1 and 2, rate between (1+2) and (3) is calculated
+n = size(Kl,1); vlp = vlp - logSumExp(vlp);
+Kl(find(Kl==0))=-1e9;
+if (nargin<3) howFine = 4; endif % each exponential step is divided into 2^howFine linear propagation steps
+if (nargin<4) lstartdt = -6; endif % the initial time step is exp(lstartdt) x (time of the fastest process in the network)
+if (nargin<5) ratioEnd = 1e-5; endif % criterion for stopping the propagation: 1-ratioEnd relaxed for all groupings
+nFine = 2^howFine;
+ldt = -max([Kl(1,2:3),Kl(2,1),Kl(2,3),Kl(3,1:2)])+lstartdt-howFine*log(2);
+vTs = [Kl(1,2),Kl(1,3),Kl(2,3)]+ldt; vT = vTs;
+for iFine=1:howFine vT = multLogMat3(vT,vlp); endfor
+p = lpopul(vT,vlp); ldt = ldt + howFine*log(2); ltau = ldt;
+while (p>ratioEnd)
+  [ldtau,p] = intLog(ldt,nFine,vT,vTs,vlp); % perform the linear propagation
+  vT = multLogMat3(vT,vlp); % transition matrix for dt -> 2 dt
+  vTs = multLogMat3(vTs,vlp); % transition matrix for dt / 2^howFine -> dt / 2^(howFine-1)
+  ltau = logSumExp([ltau;ldtau]); % update the relaxation time
+  ldt += log(2); % double dt
+endwhile
+ltau = expTail(vT,[Kl(1,3),Kl(2,3),Kl(3,1),Kl(3,2)],vlp,ltau); % add the tail (since the propagation ends early; see ratioEnd)
+[lkTSTAB,lkTSTBA] = tstlog(Kl,vlp); % calculate TST rates
+lkAB = logSumExp(vlp(1:2))-ltau;
+if (lkAB>lkTSTAB)
+  lkAB = lkTSTAB;
+  tstwatsmaller = 1
+endif
+lkBA = lkAB+vlp(3)-logSumExp(vlp(1:2));
+endfunction
+
+function [ltau,p] = intLog(lt,nFine,vT,vTs,vpl)
+% performs linear propagation from time exp(lt) to 2 exp(lt)
+vp = zeros(1,nFine+1); % populations of grouped state at times between exp(lt) and 2 exp(lt)
+vt = [1:1/nFine:2];
+vpl0 = [vT(2);vT(3);subFrom1(logSumExp(vT(2:3)'))]; % populations of all states at exp(lt) 
+vp(1) = lpop(vpl0,vpl);
+Ts = [0,vTs(1:2);vTs(1)+vpl(2)-vpl(1),0,vTs(3);vTs(2)+vpl(3)-vpl(1),vTs(3)+vpl(3)-vpl(2),0];
+Ts(1,1) = real(subFrom1(logSumExp(Ts(2:3,1))));
+Ts(2,2) = real(subFrom1(logSumExp(Ts([1;3],2))));
+Ts(3,3) = real(subFrom1(logSumExp(Ts(1:2,3))));
+for i = 1:nFine
+  vpl0 = multMatVec3(Ts,vpl0);
+  vp(i+1) = lpop(vpl0,vpl);
+endfor
+taudiff = trapz(vt,vp); % the average scaled population of the grouped state (always between 0 and 1)
+ltau = lt + log(taudiff);
+p = vp(nFine+1);
+endfunction
+
+function vl = multMatVec3(Tl,vl0)
+% robust multiplication of a log vector by a log matrix
+vl = vl0;
+for i=1:3 vl(i) = logSumExp(Tl(i,:)'+vl0); endfor
+endfunction
+
+function p = lpop(vpl0,vple)
+% scaled population from current and equilibrium population vectors
+lpe = logSumExp(vple(1:2));
+lpn = logSumExp(vpl0(1:2));
+dlp = lpn - lpe;
+if (dlp<-20)
+  p = 1;
+else
+  p = 1 - exp(dlp);
+endif
+endfunction

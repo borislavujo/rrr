@@ -1,0 +1,22 @@
+function vsl = logSumTerms(vres,vpm,Terms)
+[n,nt] = size(Terms);
+Trms = sortrows([vres,vpm,Terms]);
+vsl = Trms(1,:);
+for i=2:size(Trms,1)
+  if (vsl(2)==Trms(i,2))
+    vsl(1) = logSumExp([vsl(1);Trms(i,1)])
+  elseif (vsl(1)>Trms(i,1))
+    vsl(1) = logDiffExp(vsl(1),Trms(i,1))
+  elseif (vsl(1)<Trms(i,1))
+    vsl(1) = logDiffExp(Trms(i,1),vsl(1))
+    vsl(2) = -vsl(2);
+  else
+%    Ukazobe = [vsl;Trms(i,:)]
+    vsl = [-1e9, 1];
+%    error ('ina moznost predsa nie je kua')
+  endif
+endfor
+koniec = vsl
+%if (vsl(2) == 1) error('samfing is rottn'); endif % the code is done such that the result should be positive
+%sl = vsl(1);
+endfunction

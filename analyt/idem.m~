@@ -1,0 +1,8 @@
+function som = idem(neviem,celkom)
+if (nargin<2) celkom = 0 ; endif
+if (neviem>1)
+  som = idem(neviem-1,celkom+neviem)
+else
+  som = neviem
+endif
+endfunction
